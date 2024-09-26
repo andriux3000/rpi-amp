@@ -1,42 +1,36 @@
 #include "rotary_encoder.h"
 
-void* re_decoder::buttonPressFunc_wrapper(void* arg) {
-	reinterpret_cast<re_decoder*>(arg)->buttonPressFunc();
-	return 0;
-}
-
-void re_decoder::buttonPressFunc() {
-	usleep(DOUBLE_PRESS_TIME*1000+20);
-	(mycallback)(BUTTON_PRESS);
-}
 
 void re_decoder::_pulse(int gpio, int level, uint32_t tick)
 {
-	//Button section
-	if (gpio == myButton && currentTime()-lastButtonEvent > DEBOUNCE_TIME) {
-		if (level == 0) {
-			if (pButtonPressFunc) {
-				gpioStopThread(pButtonPressFunc);
-				pButtonPressFunc = NULL;
-			}
-			lastButtonPress = currentTime();
+
+//////////////Button section/////////////////
+if (gpio == myButton && currentTime()-lastButtonEvent > DEBOUNCE_TIME) {
+
+	if (level == 0) {
+		if (pButtonPressFunc) {
+			gpioStopThread(pButtonPressFunc);
+			pButtonPressFunc = NULL;
 		}
-		else if (level == 1 && (currentTime()-lastButtonRelease > DEBOUNCE_TIME)){
-			if (currentTime()-lastButtonPress > LONG_PRESS_TIME) {
-				(mycallback)(LONG_PRESS);
-			}
-			else if (currentTime()-lastButtonRelease < DOUBLE_PRESS_TIME) {
-				(mycallback)(DOUBLE_PRESS);
-			}
-			else {
-				pButtonPressFunc = gpioStartThread(&buttonPressFunc_wrapper, this);
-			}
-			lastButtonRelease = currentTime();
-		}
-		lastButtonEvent = currentTime();
+		lastButtonPress = currentTime();
 	}
 
-	//Rotary encoder section
+	else if (level == 1 && (currentTime()-lastButtonRelease > DEBOUNCE_TIME)){
+		if (currentTime()-lastButtonPress > LONG_PRESS_TIME) {
+			(mycallback)(LONG_PRESS);
+		}
+		else if (currentTime()-lastButtonRelease < DOUBLE_PRESS_TIME) {
+			(mycallback)(DOUBLE_PRESS);
+		}
+		else {
+			pButtonPressFunc = gpioStartThread(&buttonPressFunc_wrapper, this);
+		}
+		lastButtonRelease = currentTime();
+	}
+	lastButtonEvent = currentTime();
+}
+
+ ///////////Rotary encoder section/////////////
 	if (gpio == mygpioA) {
 		levA = level;
 	} 
@@ -45,7 +39,6 @@ void re_decoder::_pulse(int gpio, int level, uint32_t tick)
 	}
 
 	levC = levA ^ levB;
-	
 	int new_state = levA * 4 + levB * 2 + levC * 1;
 	int delta = (new_state - last_state) % 4;
 	
@@ -63,6 +56,18 @@ void re_decoder::_pulse(int gpio, int level, uint32_t tick)
 	last_state = new_state;
 }
 
+
+void* re_decoder::buttonPressFunc_wrapper(void* arg) {
+	reinterpret_cast<re_decoder*>(arg)->buttonPressFunc();
+	return 0;
+}
+
+void re_decoder::buttonPressFunc() {
+	usleep(DOUBLE_PRESS_TIME*1000+20);
+	(mycallback)(BUTTON_PRESS);
+}
+
+
 void re_decoder::_pulseEx(int gpio, int level, uint32_t tick, void *user)
 {
 	/*
@@ -74,10 +79,12 @@ void re_decoder::_pulseEx(int gpio, int level, uint32_t tick, void *user)
 	mySelf->_pulse(gpio, level, tick); /* Call the instance callback. */
 }
 
+
 uint64_t re_decoder::currentTime() {
 	using namespace std::chrono;
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
+
 
 re_decoder::re_decoder(int gpioA, int gpioB, int button, re_decoderCB_t callback)
 {
@@ -117,6 +124,7 @@ re_decoder::re_decoder(int gpioA, int gpioB, int button, re_decoderCB_t callback
 	gpioSetAlertFuncEx(gpioB, _pulseEx, this);
 	gpioSetAlertFuncEx(button, _pulseEx, this);
 }
+
 
 void re_decoder::re_cancel(void)
 {

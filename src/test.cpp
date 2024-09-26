@@ -9,5 +9,5 @@ int main() {
 	/*if (display.setupHWSPI() != 0) return -1;
 	display.helloWorld();
 	display.endTest();*/
-    return 0;
+	return 0;
 }

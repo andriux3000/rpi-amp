@@ -1,0 +1,66 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Iinclude/",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-std=c++20",
+      "-o",
+      "Build/codec.o",
+      "src/codec.cpp"
+    ],
+    "directory": "/home/pi/rpi-amp",
+    "file": "/home/pi/rpi-amp/src/codec.cpp",
+    "output": "/home/pi/rpi-amp/Build/codec.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Iinclude/",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-std=c++20",
+      "-o",
+      "Build/display.o",
+      "src/display.cpp"
+    ],
+    "directory": "/home/pi/rpi-amp",
+    "file": "/home/pi/rpi-amp/src/display.cpp",
+    "output": "/home/pi/rpi-amp/Build/display.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Iinclude/",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-std=c++20",
+      "-o",
+      "Build/metadata.o",
+      "src/metadata.cpp"
+    ],
+    "directory": "/home/pi/rpi-amp",
+    "file": "/home/pi/rpi-amp/src/metadata.cpp",
+    "output": "/home/pi/rpi-amp/Build/metadata.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Iinclude/",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-std=c++20",
+      "-o",
+      "Build/test.o",
+      "src/test.cpp"
+    ],
+    "directory": "/home/pi/rpi-amp",
+    "file": "/home/pi/rpi-amp/src/test.cpp",
+    "output": "/home/pi/rpi-amp/Build/test.o"
+  }
+]
