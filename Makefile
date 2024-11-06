@@ -4,8 +4,8 @@ MAKEFLAGS += --no-print-directory
 SRC = src
 
 #Flags
-LDFLAGS = -lbcm2835 -lrpidisplaygl -lpigpio -lrt
-CFLAGS = -Iinclude/ -c -Wall -Wextra -std=c++20
+LDFLAGS = -lbcm2835 -lrpidisplaygl -lpigpio -lrt -lasound
+CFLAGS = -Iinclude/ -c -Wall -Wextra -std=c++20 -g
 
 #Build directories and output
 MD = mkdir

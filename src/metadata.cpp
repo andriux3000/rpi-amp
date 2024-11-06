@@ -1,77 +1,133 @@
 #include "metadata.h"
+#include <iostream>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <poll.h>
+#include <cstring>
+#include <cstdlib>
+#include <vector>
 
-Metadata::Metadata(){
+ShairportSyncMetadataReader::ShairportSyncMetadataReader() : pipe_name("/tmp/pipe"), pipe_fd(-1) {}
 
+void ShairportSyncMetadataReader::run() {
+    openPipe();
+    processMetadata();
 }
 
-
-void Metadata::initialise_decoding_table(){
-	int i;
-	for (i = 0; i < 64; i++)
-	decoding_table[(unsigned char)encoding_table[i]] = i;
+std::string ShairportSyncMetadataReader::getMetadata() const {
+    return metadata;
 }
 
-
-char* Metadata::base64_encode(const unsigned char* data, size_t input_length, char* encoded_data, size_t* output_length){
-
-	size_t calculated_output_length = 4 * ((input_length + 2) / 3);
-	if (calculated_output_length > *output_length)
-		return (NULL);
-	*output_length = calculated_output_length;
-	
-	int i, j;
-	for (i = 0, j = 0; i < input_length;) {
-
-		uint32_t octet_a = i < input_length ? (unsigned char)data[i++] : 0;
-		uint32_t octet_b = i < input_length ? (unsigned char)data[i++] : 0;
-		uint32_t octet_c = i < input_length ? (unsigned char)data[i++] : 0;
-		
-		uint32_t triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
-		
-		encoded_data[j++] = encoding_table[(triple >> 3 * 6) & 0x3F];
-		encoded_data[j++] = encoding_table[(triple >> 2 * 6) & 0x3F];
-		encoded_data[j++] = encoding_table[(triple >> 1 * 6) & 0x3F];
-		encoded_data[j++] = encoding_table[(triple >> 0 * 6) & 0x3F];
-	}
-
-	for (i = 0; i < mod_table[input_length % 3]; i++)
-		encoded_data[*output_length - 1 - i] = '=';
-
-	return encoded_data;
+std::string ShairportSyncMetadataReader::getOtherData() const {
+    return otherData;
 }
 
+void ShairportSyncMetadataReader::openPipe() {
+    if ((pipe_fd = open(pipe_name.c_str(), O_RDONLY)) < 0) {
+        std::cerr << "Failed to open pipe " << pipe_name << std::endl;
+        exit(1);
+    }
+}
 
-int Metadata::base64_decode(const char* data, size_t input_length, unsigned char* decoded_data, size_t* output_length){
-  if (input_length % 4 != 0)
-    return -1;
+void ShairportSyncMetadataReader::processMetadata() {
+    struct pollfd fds[1];
+    fds[0].fd = pipe_fd;
+    fds[0].events = POLLIN;
 
-  size_t calculated_output_length = input_length / 4 * 3;
-  if (data[input_length - 1] == '=')
-    calculated_output_length--;
-  if (data[input_length - 2] == '=')
-    calculated_output_length--;
-  if (calculated_output_length > *output_length)
-    return (-1);
-  *output_length = calculated_output_length;
+    char buffer[1024];
+    while (true) {
+        int ret = poll(fds, 1, -1);
+        if (ret > 0) {
+            if (fds[0].revents & POLLIN) {
+                ssize_t len = read(pipe_fd, buffer, sizeof(buffer) - 1);
+                if (len > 0) {
+                    buffer[len] = '\0';
+                    handleMessage(buffer, len);
+                }
+            }
+        } else {
+            std::cerr << "Polling error" << std::endl;
+            break;
+        }
+    }
+}
 
-  int i, j;
-  for (i = 0, j = 0; i < input_length;) {
+void ShairportSyncMetadataReader::handleMessage(const char* msg, ssize_t len) {
+    std::string message(msg, len);
 
-    uint32_t sextet_a = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
-    uint32_t sextet_b = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
-    uint32_t sextet_c = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
-    uint32_t sextet_d = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
+    // Store message based on its type and decode Base64 if needed
+    if (message.find("ssnc") != std::string::npos) {
+        if (message.find("mdst") != std::string::npos) {
+            metadata = "Metadata start received: " + decodeBase64(message);
+        } else if (message.find("mden") != std::string::npos) {
+            metadata = "Metadata end received: " + decodeBase64(message);
+        } else {
+            metadata = "Unrecognized metadata: " + decodeBase64(message);
+        }
+    } else {
+        otherData = "Other data received: " + decodeBase64(message);
+    }
+}
 
-    uint32_t triple =
-    (sextet_a << 3 * 6) + (sextet_b << 2 * 6) + (sextet_c << 1 * 6) + (sextet_d << 0 * 6);
+std::string ShairportSyncMetadataReader::decodeBase64(const std::string& encoded) {
+    static const std::string base64_chars =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz"
+            "0123456789+/";
 
-    if (j < *output_length)
-      decoded_data[j++] = (triple >> 2 * 8) & 0xFF;
-    if (j < *output_length)
-      decoded_data[j++] = (triple >> 1 * 8) & 0xFF;
-    if (j < *output_length)
-      decoded_data[j++] = (triple >> 0 * 8) & 0xFF;
-  }
+        std::vector<unsigned char> decoded_data;
+        int in_len = encoded.size();
+        int i = 0;
+        int j = 0;
+        int in_ = 0;
+        unsigned char char_array_4[4], char_array_3[3];
 
-  return 0;
+        while (in_len-- && (encoded[in_] != '=') && isBase64(encoded[in_])) {
+            char_array_4[i++] = encoded[in_]; in_++;
+            if (i == 4) {
+                for (i = 0; i < 4; i++) {
+                    char_array_4[i] = base64_chars.find(char_array_4[i]);
+                }
+
+                char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+                char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+                char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+                for (i = 0; (i < 3); i++) {
+                    decoded_data.push_back(char_array_3[i]);
+                }
+                i = 0;
+            }
+        }
+
+        if (i) {
+            for (j = i; j < 4; j++) {
+                char_array_4[j] = 0;
+            }
+
+            for (j = 0; j < 4; j++) {
+                char_array_4[j] = base64_chars.find(char_array_4[j]);
+            }
+
+            char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+            char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+
+            for (j = 0; (j < i - 1); j++) {
+                decoded_data.push_back(char_array_3[j]);
+            }
+        }
+
+        return std::string(decoded_data.begin(), decoded_data.end());
+}
+
+bool ShairportSyncMetadataReader::isBase64(unsigned char c){
+    return (isalnum(c) || (c == '+') || (c == '/'));
+}
+
+ShairportSyncMetadataReader::~ShairportSyncMetadataReader() {
+    if (pipe_fd != -1) {
+        close(pipe_fd);
+    }
 }
